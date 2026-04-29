@@ -30,19 +30,20 @@ During execution, we encountered two significant engineering hurdles that the AI
 
 2. **The O(n²) Network Traversal Bottleneck:**
    During the migration, the transfer velocity plummeted. I fed the AI the execution logs.
-   * **The AI Solution:** The agent identified that an application cache had generated over 3,600 files with the exact same name (`5003.JPG`). My collision-handling loop was checking the network drive sequentially (`5003_1.JPG`, `5003_2.JPG`, etc.), resulting in an O(n²) degradation where the 3,600th file caused 3,600 synchronous network queries. The AI diagnosed this instantly, explaining the exact algorithmic bottleneck.
+   * **The AI Solution:** The agent identified that an application cache had generated over 3,600 files with the exact same name (`5003.JPG`). The original collision-handling loop was checking the network drive sequentially (`5003_1.JPG`, `5003_2.JPG`, etc.), resulting in an O(n²) degradation where the 3,600th file caused 3,600 synchronous network queries. The AI diagnosed this bottleneck from the execution logs and orchestrated a V2.0 refactor. We implemented a Single-Pass Filesystem Traversal using `-print0` for null-terminated strings (safely handling special characters) and upgraded the collision handler to append randomized cryptographic hex strings (`5003_a4b9.JPG`), reducing network queries to O(1) constant time.
 
 ---
 
-## 🛠️ The Architecture & Scripts
+## 🛠️ The Architecture & Scripts (v2.0)
 
 This repository contains the two primary scripts engineered for this pipeline. Both scripts were iteratively refined with the agent and represent strong Data Governance principles: **Zero Data Loss (Safe Collisions)** and **Mathematical Integrity (Cryptographic Hashing)**.
 
 ### 1. `scripts/migrate.sh` (The macOS Exfiltration Script)
-A highly robust Bash script executed on the source macOS machine.
-* **Intelligent Traversal:** Scans the entire `/Users` directory but actively prunes the `Library` folder to prevent the migration of useless system caches and application state files.
-* **Broad Extension Coverage:** Specifically targets user-generated artifacts across dozens of extensions (RAW photography, iOS HEIC, Microsoft Office, Apple iWork, lossless audio, etc.).
-* **Zero-Loss Collision Handling:** Ensures that identically named files across different macOS directories (e.g., `IMG_0001.JPG` in 'Desktop' and 'Pictures') are safely renamed during network transit without overwriting data.
+A highly robust, Single-Pass Bash script executed on the source macOS machine.
+* **Single-Pass Null-Terminated Traversal:** Scans the entire `/Users` directory once using `find ... -print0` to guarantee flawless execution even on folders with emojis, newlines, or invisible characters. It actively prunes the `Library` folder to prevent the migration of useless system caches.
+* **Fast In-Memory Categorization:** Categorizes files into semantic folders (Photos, Videos, Documents) on-the-fly using a fast Bash `case` statement against lowercase file extensions.
+* **O(1) Collision Handling:** Ensures that identically named files across different macOS directories (e.g., `IMG_0001.JPG` in 'Desktop' and 'Pictures') are safely renamed via `openssl rand -hex` without overwriting data, preventing massive network bottlenecks.
+* **Robust Auditing:** Automatically multiplexes output (`tee`) to a local Desktop log and mirrors the final log onto the Windows SMB share.
 
 ### 2. `scripts/deduplicate.ps1` (The Windows Cryptographic Deduplication Script)
 Because the collision handler aggressively preserves files, the resulting dataset inherently contains user-generated duplicates.

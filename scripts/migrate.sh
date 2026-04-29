@@ -1,100 +1,98 @@
 #!/bin/bash
 
 # ==============================================================================
-# Mac to Windows Network Exfiltration Script
+# Mac to Windows Network Exfiltration Script (v2.0 - O(1) Refactor)
 # Purpose: Safely migrate user files from macOS to Windows via SMB.
-# Agentic Note: Designed iteratively with Gemini 3.1 Pro to ensure zero data
-# loss through robust collision handling and strategic directory pruning.
+# Agentic Note: Refactored with Gemini 3.1 Pro to resolve O(n^2) network
+# bottlenecks and implement single-pass, null-terminated filesystem traversal.
 # ==============================================================================
 
 # Configuration
 SHARE_NAME="Mac_Migration"
 MOUNT_POINT="/Volumes/$SHARE_NAME"
+LOG_FILE=~/Desktop/Migration_Log_$(date +%s).txt
+
+# Set up logging to output to both console and log file
+exec > >(tee -a "$LOG_FILE") 2>&1
 
 echo "========================================"
 echo "  Mac to Windows Comprehensive Script   "
+echo "  Version: 2.0 (Single-Pass O(1))       "
+echo "  Log File: $LOG_FILE                   "
 echo "========================================"
 
-# Safety Check: Ensure the network drive is actively mounted
-# This prevents the script from accidentally creating local folders on the Mac
-# if the SMB connection dropped.
 if [ ! -d "$MOUNT_POINT" ]; then
     echo "Error: The share does not appear to be mounted at $MOUNT_POINT."
     exit 1
 fi
 
+# Create target directories upfront
+mkdir -p "$MOUNT_POINT/Photos" "$MOUNT_POINT/Videos" "$MOUNT_POINT/Audio"
+mkdir -p "$MOUNT_POINT/Documents" "$MOUNT_POINT/Contacts" "$MOUNT_POINT/Other"
+
+echo "Scanning /Users (excluding Library)... This may take a moment to index."
+
 # ------------------------------------------------------------------------------
-# Core Function: copy_files
-# Arguments: 
-#   $1 = Target Category Folder (e.g., 'Photos', 'Videos')
-#   $@ = List of file extensions to search for
+# Single-Pass Filesystem Traversal
+# By using `-print0` and `read -d $'\0'`, we safely handle emojis, newlines, 
+# and special characters in folder/file names. We only run `find` ONCE.
 # ------------------------------------------------------------------------------
-copy_files() {
-    local category=$1
-    local dest_dir="$MOUNT_POINT/$category"
-    shift
-    local extensions=("$@")
+find /Users -type d -name 'Library' -prune -o -type f -print0 | while IFS= read -r -d $'\0' file; do
     
-    # Ensure the destination directory exists on the Windows SMB share
-    mkdir -p "$dest_dir"
+    filename=$(basename "$file")
+    extension="${filename##*.}"
     
-    echo "========================================"
-    echo "Scanning for $category files..."
+    # If the file has no extension or is hidden, skip it to save time
+    if [[ "$filename" == .* ]] || [[ "$filename" == "$extension" ]]; then
+        continue
+    fi
     
-    # Build a dynamic find command
-    # CRITICAL: We explicitly prune (skip) the 'Library' directory.
-    # macOS stores hundreds of thousands of hidden cache files, app icons, 
-    # and background data in ~/Library. Skipping this prevents the migration 
-    # of useless garbage and massively speeds up network traversal.
-    local find_cmd="find /Users -type d -name 'Library' -prune -o -type f \( "
+    # Convert extension to lowercase for reliable matching
+    ext_lower=$(echo "$extension" | tr '[:upper:]' '[:lower:]')
     
-    # Loop through the provided extensions and build the query string
-    for i in "${!extensions[@]}"; do
-        if [ $i -gt 0 ]; then find_cmd+=" -o "; fi
-        find_cmd+="-iname '*.${extensions[$i]}'"
-    done
-    find_cmd+=" \) -print"
+    category=""
     
-    # Execute the find command and pipe the output to the while loop.
-    # 2>/dev/null hides permission denied errors for system-level folders.
-    eval "$find_cmd" 2>/dev/null | while read -r file; do
-        filename=$(basename "$file")
-        dest_path="$dest_dir/$filename"
+    # Fast in-memory semantic categorization
+    case "$ext_lower" in
+        heic|heif|jpg|jpeg|png|gif|tiff|tif|raw|cr2|nef|arw|dng|bmp|svg) category="Photos" ;;
+        mp4|mov|avi|mkv|wmv|flv|webm|m4v) category="Videos" ;;
+        mp3|m4a|wav|flac|aac|ogg|wma) category="Audio" ;;
+        pdf|doc|docx|txt|rtf|pages|numbers|key|xls|xlsx|ppt|pptx|csv|md) category="Documents" ;;
+        vcf) category="Contacts" ;;
+        zip|rar|7z|tar|gz) category="Other" ;;
+        *) continue ;; # Skip unsupported file types
+    esac
+    
+    dest_dir="$MOUNT_POINT/$category"
+    dest_path="$dest_dir/$filename"
+    
+    # --------------------------------------------------------------------------
+    # O(1) Collision Handler
+    # Instead of checking network sequentially (name_1, name_2 ... name_3600),
+    # we instantly append a randomized 4-character hex string if the file exists.
+    # This prevents the script from freezing on app cache folders with thousands
+    # of identically named files.
+    # --------------------------------------------------------------------------
+    if [ -f "$dest_path" ]; then
+        name="${filename%.*}"
+        rand_str=$(openssl rand -hex 2)
+        dest_path="$dest_dir/${name}_${rand_str}.${extension}"
         
-        # ----------------------------------------------------------------------
-        # Data Governance: Zero-Loss Collision Handling
-        # If the destination already has a file with this name (e.g., from a 
-        # different source folder), append a counter (IMG_0001_1.JPG).
-        # Note: This is an O(n) check over the network. If there are 3,000 files 
-        # with the exact same name, it will query the network 3,000 times.
-        # ----------------------------------------------------------------------
-        counter=1
+        # Unlikely secondary collision fallback
         while [ -f "$dest_path" ]; do
-            name="${filename%.*}"
-            extension="${filename##*.}"
-            if [ "$name" == "$filename" ]; then
-                dest_path="$dest_dir/${name}_${counter}"
-            else
-                dest_path="$dest_dir/${name}_${counter}.${extension}"
-            fi
-            ((counter++))
+            rand_str=$(openssl rand -hex 3)
+            dest_path="$dest_dir/${name}_${rand_str}.${extension}"
         done
-        
-        # Execute the copy over the SMB network mount
-        echo "Copying: $filename -> $dest_path"
-        cp "$file" "$dest_path"
-    done
-}
+        echo "[COLLISION AVOIDED] Renamed to ${name}_${rand_str}.${extension}"
+    fi
+    
+    echo "Copying [$category]: $filename"
+    cp "$file" "$dest_path"
+done
 
-echo "Starting comprehensive migration..."
-
-# Execute the scans by semantic category
-copy_files "Photos" "heic" "heif" "jpg" "jpeg" "png" "gif" "tiff" "tif" "raw" "cr2" "nef" "arw" "dng" "bmp" "svg"
-copy_files "Videos" "mp4" "mov" "avi" "mkv" "wmv" "flv" "webm" "m4v"
-copy_files "Audio" "mp3" "m4a" "wav" "flac" "aac" "ogg" "wma"
-copy_files "Documents" "pdf" "doc" "docx" "txt" "rtf" "pages" "numbers" "key" "xls" "xlsx" "ppt" "pptx" "csv" "md"
-copy_files "Contacts" "vcf"
-copy_files "Other" "zip" "rar" "7z" "tar" "gz"
+# Copy the local log file to the SMB share for review
+cp "$LOG_FILE" "$MOUNT_POINT/Other/Migration_Log_Final.txt"
 
 echo "========================================"
 echo "Migration script fully completed!"
+echo "Log saved to: $MOUNT_POINT/Other/Migration_Log_Final.txt"
