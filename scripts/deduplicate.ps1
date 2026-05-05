@@ -7,7 +7,7 @@
     designed iteratively with the Antigravity AI Agent (Gemini 3.1 Pro) to 
     establish mathematical certainty during the data governance phase.
 #>
-
+Start-Transcript -Path "C:\Mac_Migration\Dedupe_Log.txt" -Append
 $TargetDirectory = "C:\Mac_Migration"
 
 Write-Host "================================================"
@@ -37,7 +37,7 @@ $i = 0
 foreach ($file in $files) {
     $i++
     # Progress UI to keep the user informed during long hashing operations
-    Write-Progress -Activity "Analyzing Files for Duplicates (SHA-256)" -Status "Processing file $i of $totalFiles: $($file.Name)" -PercentComplete (($i / $totalFiles) * 100)
+    Write-Progress -Activity "Analyzing Files for Duplicates (SHA-256)" -Status "Processing file $i of $($totalFiles): $($file.Name)" -PercentComplete (($i / $totalFiles) * 100)
     
     try {
         # ----------------------------------------------------------------------
@@ -47,21 +47,23 @@ foreach ($file in $files) {
         # superior to checking filenames or file sizes, which can lead to 
         # catastrophic data loss if two different photos share the same size.
         # ----------------------------------------------------------------------
-        $hash = (Get-FileHash -Path $file.FullName -Algorithm SHA256).Hash
+        $hash = (Get-FileHash -Path $file.FullName -Algorithm SHA256 -ErrorAction Stop).Hash
         
-        if ($hashTable.ContainsKey($hash)) {
-            $originalFile = $hashTable[$hash]
-            Write-Host "[DELETING DUPLICATE] $($file.Name)"
-            Write-Host "    -> Exact match of: $($originalFile.Name)"
-            
-            $freedSpace += $file.Length
-            $duplicateCount++
-            
-            # Safely remove the identified duplicate to reclaim NVMe storage
-            Remove-Item -Path $file.FullName -Force
-        } else {
-            # First time seeing this file content, add it to our dictionary
-            $hashTable[$hash] = $file
+        if ($null -ne $hash) {
+            if ($hashTable.ContainsKey($hash)) {
+                $originalFile = $hashTable[$hash]
+                Write-Host "[DELETING DUPLICATE] $($file.Name)"
+                Write-Host "    -> Exact match of: $($originalFile.Name)"
+                
+                $freedSpace += $file.Length
+                $duplicateCount++
+                
+                # Safely remove the identified duplicate to reclaim NVMe storage
+                Remove-Item -Path $file.FullName -Force
+            } else {
+                # First time seeing this file content, add it to our dictionary
+                $hashTable[$hash] = $file
+            }
         }
     } catch {
         Write-Host "[ERROR] Could not process $($file.FullName): $($_.Exception.Message)" -ForegroundColor Red
@@ -84,6 +86,7 @@ if ($freedGB -gt 1) {
     Write-Host "Storage Space Freed : $freedMB MB"
 }
 Write-Host "================================================"
+Stop-Transcript
 
-Write-Host "Press any key to exit..."
-$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+Add-Type -AssemblyName PresentationFramework
+[System.Windows.MessageBox]::Show("Phase 3 Deduplication is 100% Complete! You can now review the logs at C:\Mac_Migration\Dedupe_Log.txt and restart the migration on your Mac.", "Deduplication Finished")
