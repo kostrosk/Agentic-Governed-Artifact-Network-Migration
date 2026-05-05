@@ -40,7 +40,7 @@ $i = 0
 
 foreach ($file in $filesToHash) {
     $i++
-    Write-Progress -Activity "Analyzing Files for Duplicates (SHA-256)" -Status "Hashing file $i of $totalToHash: $($file.Name)" -PercentComplete (($i / $totalToHash) * 100)
+    Write-Progress -Activity "Analyzing Files for Duplicates (SHA-256)" -Status "Hashing file $i of $totalToHash - $($file.Name)" -PercentComplete (($i / $totalToHash) * 100)
     
     try {
         $hash = (Get-FileHash -Path $file.FullName -Algorithm SHA256 -ErrorAction Stop).Hash
