@@ -51,6 +51,12 @@ Because the collision handler aggressively preserves files, the resulting datase
 * **Advanced Selection Logic:** When identical hashes are found, the script employs a custom scoring algorithm to determine the "original" or cleanest filename. It heavily penalizes and purges auto-generated copy suffixes (like `_1_105_c` from Apple Photos or `(1)`) while preserving the shortest, unaltered filename.
 * **Memory-Optimized Cleanup:** It maintains an in-memory hash table of duplicate sets, ensuring the safest mathematical verification before safely purging sub-optimal copies and reporting the exact storage space freed.
 
+### 3. `scripts/generate_fuzzy_crib_sheet.ps1` & `execute_crib_sheet.ps1` (Phase 4 Fuzzy Deduplication)
+Apple Photos often exports modified versions of images (e.g., adding a filter or EXIF data) alongside the original. Because the metadata changes, the file sizes and cryptographic hashes differ, meaning Phase 3 safely ignores them.
+* **Automated Scoring:** This Phase 4 script parses the migration directory to group files sharing a common base name (ignoring suffixes like `_1_105_c` or `(1)`). It then automatically ranks them, preferring the file with the largest size (most metadata/resolution) and most recent timestamp.
+* **Human-in-the-Loop Crib Sheet:** Instead of automatically deleting files, it generates an interactive Markdown "Crib Sheet" (`Fuzzy_Dedupe_Approval.md`) with clickable links to the files. It lists the AI's recommendations for which file to KEEP and which to DELETE.
+* **Automated Execution:** After the user reviews the Crib Sheet (optionally moving links if they disagree), the `execute_crib_sheet.ps1` script is run. It parses the Markdown file and permanently deletes the files remaining under the `DELETE` headers.
+
 ---
 
 ## 💻 Hardware End-State & Business Value
