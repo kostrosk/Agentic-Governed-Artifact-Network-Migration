@@ -47,8 +47,9 @@ A highly robust, Single-Pass Bash script executed on the source macOS machine.
 
 ### 2. `scripts/deduplicate.ps1` (The Windows Cryptographic Deduplication Script)
 Because the collision handler aggressively preserves files, the resulting dataset inherently contains user-generated duplicates.
-* **SHA-256 Hashing:** Instead of relying on brittle file names or timestamps, this PowerShell script calculates the true cryptographic SHA-256 hash of every single file.
-* **Memory-Optimized Cleanup:** It maintains an in-memory hash table. If a hash collision occurs (meaning the bits are 100% identical), it safely purges the duplicate, reporting the exact storage space freed.
+* **Length-Based Optimization:** To maximize performance, the script first groups files by exact file size, computing the expensive SHA-256 hash *only* for files that share identical byte counts.
+* **Advanced Selection Logic:** When identical hashes are found, the script employs a custom scoring algorithm to determine the "original" or cleanest filename. It heavily penalizes and purges auto-generated copy suffixes (like `_1_105_c` from Apple Photos or `(1)`) while preserving the shortest, unaltered filename.
+* **Memory-Optimized Cleanup:** It maintains an in-memory hash table of duplicate sets, ensuring the safest mathematical verification before safely purging sub-optimal copies and reporting the exact storage space freed.
 
 ---
 
