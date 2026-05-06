@@ -40,8 +40,7 @@ foreach ($line in $lines) {
         # Markdown URLs often use forward slashes, replace with backslashes for Windows
         $filePath = $filePath.Replace('/', '\')
         
-        # URL Decoding spaces (%20) if any
-        $filePath = [System.Web.HttpUtility]::UrlDecode($filePath)
+        # Paths are literal (not URL encoded), so do not decode them
         
         if (Test-Path -LiteralPath $filePath) {
             $fileObj = Get-Item -LiteralPath $filePath

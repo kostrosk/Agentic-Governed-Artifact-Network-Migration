@@ -56,6 +56,7 @@ Because the collision handler aggressively preserves files, the resulting datase
 Apple Photos often exports modified versions of images (e.g., adding a filter or EXIF data) alongside the original. Because the metadata changes, the file sizes and cryptographic hashes differ, meaning Phase 3 safely ignores them.
 * **Automated Scoring:** This Phase 4 script parses the migration directory to group files sharing a common base name (ignoring suffixes like `_1_105_c` or `(1)`). It then automatically ranks them, preferring the file with the largest size (most metadata/resolution) and most recent timestamp.
 * **Human-in-the-Loop Crib Sheet:** Instead of automatically deleting files, it generates an interactive Markdown "Crib Sheet" (`Fuzzy_Dedupe_Approval.md`) with clickable links to the files. It lists the AI's recommendations for which file to KEEP and which to DELETE.
+* **Resilient File Path Parsing:** Early iterations of the execution script failed to delete files containing a literal `+` or `%20` (such as `Song Name + Remix.mp3`) because the parser incorrectly applied URL Decoding (`HttpUtility.UrlDecode`), converting `+` into spaces. The script has been hardened to parse raw literal strings, guaranteeing 100% deletion success on complex filenames.
 * **Automated Execution:** After the user reviews the Crib Sheet (optionally moving links if they disagree), the `execute_crib_sheet.ps1` script is run. It parses the Markdown file and permanently deletes the files remaining under the `DELETE` headers.
 
 ---
