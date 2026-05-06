@@ -74,6 +74,14 @@ find /Users -type d -name 'Library' -prune -o -type f -print0 | while IFS= read 
     # of identically named files.
     # --------------------------------------------------------------------------
     if [ -f "$dest_path" ]; then
+        # Check size to avoid redundant copies on subsequent runs
+        src_size=$(stat -f "%z" "$file" 2>/dev/null || stat -c "%s" "$file" 2>/dev/null)
+        dest_size=$(stat -f "%z" "$dest_path" 2>/dev/null || stat -c "%s" "$dest_path" 2>/dev/null)
+        if [ -n "$src_size" ] && [ "$src_size" = "$dest_size" ]; then
+            echo "[SKIPPED] Already identical: $filename"
+            continue
+        fi
+        
         name="${filename%.*}"
         rand_str=$(openssl rand -hex 2)
         dest_path="$dest_dir/${name}_${rand_str}.${extension}"

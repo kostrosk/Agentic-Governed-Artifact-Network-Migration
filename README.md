@@ -42,7 +42,8 @@ This repository contains the two primary scripts engineered for this pipeline. B
 A highly robust, Single-Pass Bash script executed on the source macOS machine.
 * **Single-Pass Null-Terminated Traversal:** Scans the entire `/Users` directory once using `find ... -print0` to guarantee flawless execution even on folders with emojis, newlines, or invisible characters. It actively prunes the `Library` folder to prevent the migration of useless system caches.
 * **Fast In-Memory Categorization:** Categorizes files into semantic folders (Photos, Videos, Documents) on-the-fly using a fast Bash `case` statement against lowercase file extensions.
-* **O(1) Collision Handling:** Ensures that identically named files across different macOS directories (e.g., `IMG_0001.JPG` in 'Desktop' and 'Pictures') are safely renamed via `openssl rand -hex` without overwriting data, preventing massive network bottlenecks.
+* **Smart Collision Avoidance & Duplicate Prevention:** If the migration script is run multiple times, it prevents the exponential generation of duplicates by comparing file sizes (`stat`). If a collision occurs but the source and destination files share the exact same byte count, the script safely skips the copy.
+* **O(1) Collision Handling:** If files share the same name but differ in size (e.g., two different `IMG_0001.JPG` files), they are safely renamed via `openssl rand -hex` without overwriting data, bypassing synchronous O(n²) bottlenecks.
 * **Robust Auditing:** Automatically multiplexes output (`tee`) to a local Desktop log and mirrors the final log onto the Windows SMB share.
 
 ### 2. `scripts/deduplicate.ps1` (The Windows Cryptographic Deduplication Script)

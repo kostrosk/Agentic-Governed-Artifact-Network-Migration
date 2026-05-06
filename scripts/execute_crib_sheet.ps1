@@ -24,16 +24,16 @@ Write-Host "    Phase 4: Executing Fuzzy Deduplication      "
 Write-Host "================================================"
 
 foreach ($line in $lines) {
-    if ($line -match '\*\*✅ Recommended to KEEP:\*\*') {
+    if ($line -match 'Recommended to KEEP:\*\*') {
         $inDeleteSection = $false
     }
-    elseif ($line -match '\*\*❌ Recommended to DELETE:\*\*') {
+    elseif ($line -match 'Recommended to DELETE:\*\*') {
         $inDeleteSection = $true
     }
     elseif ($line -match '^## Group:') {
         $inDeleteSection = $false
     }
-    elseif ($inDeleteSection -and $line -match '^- \[.*?\]\(file:///(.*?)\)') {
+    elseif ($inDeleteSection -and $line -match '^- \[.*?\]\(file:///(.*)\) \(') {
         # Extract the file path from the markdown link
         $filePath = $matches[1]
         
@@ -43,12 +43,12 @@ foreach ($line in $lines) {
         # URL Decoding spaces (%20) if any
         $filePath = [System.Web.HttpUtility]::UrlDecode($filePath)
         
-        if (Test-Path $filePath) {
-            $fileObj = Get-Item $filePath
+        if (Test-Path -LiteralPath $filePath) {
+            $fileObj = Get-Item -LiteralPath $filePath
             $freedSpace += $fileObj.Length
             
             Write-Host "[DELETING] $($fileObj.Name)"
-            Remove-Item -Path $filePath -Force
+            Remove-Item -LiteralPath $filePath -Force
             $deletedCount++
         } else {
             Write-Host "[WARNING] File not found: $filePath" -ForegroundColor Yellow
